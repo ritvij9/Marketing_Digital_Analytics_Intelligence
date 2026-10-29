@@ -1,4 +1,3 @@
-
 """Decision-oriented marketing analytics dashboard."""
 
 from pathlib import Path
@@ -49,10 +48,7 @@ def format_integer(value: int | float) -> str:
 
 
 st.title("Marketing & Digital Analytics Intelligence")
-st.caption(
-    "GA4 public ecommerce sample | "
-    "1–7 January 2021 | Observational analysis"
-)
+st.caption("GA4 public ecommerce sample | 1–7 January 2021 | Observational analysis")
 
 st.info(
     "Attribution caveat: acquisition categories use first-user traffic-source "
@@ -87,9 +83,7 @@ else:
         total_sessions = acquisition["sessions"].sum()
         converting_sessions = acquisition["converting_sessions"].sum()
         conversion_rate = (
-            converting_sessions / total_sessions * 100
-            if total_sessions
-            else 0.0
+            converting_sessions / total_sessions * 100 if total_sessions else 0.0
         )
 
         col1, col2, col3 = st.columns(3)
@@ -155,25 +149,16 @@ else:
         # Add confidence intervals when the expected columns are available.
         if uncertainty is not None:
             join_columns = [
-                column
-                for column in dimension_columns
-                if column in uncertainty.columns
+                column for column in dimension_columns if column in uncertainty.columns
             ]
             interval_columns = [
                 "ci_lower_pct",
                 "ci_upper_pct",
                 "sample_size_status",
             ]
-            required_interval_columns = set(
-                join_columns + interval_columns
-            )
+            required_interval_columns = set(join_columns + interval_columns)
 
-            if (
-                join_columns
-                and required_interval_columns.issubset(
-                    uncertainty.columns
-                )
-            ):
+            if join_columns and required_interval_columns.issubset(uncertainty.columns):
                 display = display.merge(
                     uncertainty[join_columns + interval_columns],
                     on=join_columns,
@@ -197,8 +182,7 @@ else:
 
         chart_data["chart_label"] = chart_data.apply(
             lambda row: (
-                f"{row['acquisition_category'][:55]} "
-                f"(n={row['sessions']:,.0f})"
+                f"{row['acquisition_category'][:55]} (n={row['sessions']:,.0f})"
             ),
             axis=1,
         )
@@ -225,17 +209,13 @@ else:
             "sample_size_status",
         ]
         visible_columns = [
-            column
-            for column in preferred_columns
-            if column in display.columns
+            column for column in preferred_columns if column in display.columns
         ]
 
         table = display[visible_columns].copy()
 
         if "conversion_rate_pct" in table.columns:
-            table["conversion_rate_pct"] = table[
-                "conversion_rate_pct"
-            ].round(3)
+            table["conversion_rate_pct"] = table["conversion_rate_pct"].round(3)
 
         for column in ["ci_lower_pct", "ci_upper_pct"]:
             if column in table.columns:
@@ -317,17 +297,73 @@ if quality is None:
         FILES["quality"],
         "python -m marketing_analytics.run_acquisition_analysis",
     )
+elif quality.empty:
+    st.warning("The acquisition quality output contains no rows.")
 else:
-    st.dataframe(
-        quality,
-        width="stretch",
-        hide_index=True,
-    )
+    quality_row = quality.iloc[0]
+    total_sessions = quality_row.get("total_sessions", 0)
+
+    summary_metrics = [
+        ("total_sessions", "Total sessions"),
+        ("sessions_with_any_acquisition_data", "Sessions with acquisition data"),
+        ("sessions_with_source_conflicts", "Source conflicts"),
+        ("sessions_with_medium_conflicts", "Medium conflicts"),
+        ("sessions_with_campaign_conflicts", "Campaign conflicts"),
+        ("sessions_with_any_acquisition_conflicts", "Sessions with conflicts"),
+    ]
+
+    available_metrics = [
+        (column, label)
+        for column, label in summary_metrics
+        if column in quality.columns
+    ]
+
+    st.caption("Session-level diagnostics based on event-parameter acquisition fields.")
+
+    for start in range(0, len(available_metrics), 3):
+        metric_group = available_metrics[start : start + 3]
+        columns = st.columns(len(metric_group))
+
+        for container, (column, label) in zip(columns, metric_group):
+            value = quality_row[column]
+            container.metric(label, format_integer(value))
+
+    detail_rows = []
+
+    for column in quality.columns:
+        if column == "total_sessions":
+            continue
+
+        value = quality_row[column]
+        row = {
+            "Diagnostic": column.replace("_", " ").capitalize(),
+            "Sessions": format_integer(value),
+        }
+
+        if (
+            column.startswith("sessions_with_")
+            and pd.notna(value)
+            and pd.notna(total_sessions)
+            and total_sessions > 0
+        ):
+            row["Share of all sessions (%)"] = round(
+                float(value) / float(total_sessions) * 100,
+                2,
+            )
+
+        detail_rows.append(row)
+
+    with st.expander("View all data quality diagnostics", expanded=True):
+        st.dataframe(
+            pd.DataFrame(detail_rows),
+            width="stretch",
+            hide_index=True,
+        )
 
     st.caption(
-        "This diagnostic uses event-parameter acquisition fields. Multiple "
-        "distinct values within a session require investigation but do not, "
-        "by themselves, prove a tracking defect."
+        "Conflict counts can overlap and should not be added together. "
+        "Multiple acquisition values within a session warrant investigation "
+        "but do not, by themselves, prove a tracking defect."
     )
 
 st.divider()
@@ -347,7 +383,4 @@ st.markdown(
     """
 )
 
-st.caption(
-    "Source: GA4 public ecommerce sample. "
-    "Reporting window: 1–7 January 2021."
-)
+st.caption("Source: GA4 public ecommerce sample. Reporting window: 1–7 January 2021.")
